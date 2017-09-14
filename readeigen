@@ -1,0 +1,122 @@
+#!/usr/bin/python
+
+#===========================================================================#
+#                                                                           #
+#  File:       readeigen.py                                                 #
+#  Dependence: qe_parse.py,arguments.py,xplot.py                            #
+#  Usage:      parser band file of QE and plot the band structure           #
+#  Author:     Shunhong Zhang <zhangshunhong@tsinghua.edu.cn>               #
+#  Date:       Apr 16, 2017                                                 #
+#                                                                           #
+#===========================================================================#
+
+import os
+import numpy as np
+import argparse
+import qe_parse
+import arguments
+import xplot
+
+
+desc_str= '''
+this code can be used to read eigenvalues from the file generated from PWscf after a non-scf band structure calculations
+Usage: run the file (you might need to add the permission to run it by chmod +x readeigen.py)
+       and then input the name of the file that contains the eigenvalues
+       and the Fermi level (this can be found from the output file of the scf calculation when specifing occupation = smearing)
+'''
+print desc_str 
+
+
+parser = argparse.ArgumentParser(prog='readeigen.py', description = desc_str)
+arguments.add_io_arguments(parser)
+arguments.add_fig_arguments(parser)
+arguments.add_plot_arguments(parser)
+args=parser.parse_args()
+
+def get_path(kpt):
+    nkpt=len(kpt)
+    dk = [np.linalg.norm(kpt[ikpt] - kpt[ikpt-1]) for ikpt in range(1,nkpt)]
+    path=[0]+np.cumsum(dk).tolist()
+    return path
+
+
+
+try:
+   filband = os.popen("grep filband bands.in 2>/dev/null").readline().rstrip().split("=")[1].strip("'")
+except:
+   try:
+       filband = os.popen("grep 'Bands written to file' bands.out 2>/dev/null").readline().split()[4]
+   except:
+       try:
+          flfrq=os.popen("grep flfrq *.in 2>/dev/null" ).readline().rstrip().split("=")[1].strip("'")
+       except:
+          filename=raw_input("input the file name to parse:")
+
+if filband:
+   tag="electronic"
+   filename=filband
+elif filfreq:
+   tag="phonon"
+   filename=filfreq
+else:
+   tag=raw_input("band type (electronic or phonon):")
+   
+ 
+
+print "reading from file: ",filename
+
+
+tag='electronic'
+if tag=='electronic':
+  try: 
+    efermi=float(os.popen("grep Fermi scf.out 2>/dev/null").readline().split()[4])
+  except:
+    efermi = input("Fermi energy is :")
+  nelect=os.popen("grep 'number of electrons' *.out 2>/dev/null|tail -1").readline().split("=")[1].split("\\")[0]
+  print "The Fermi energy is ",efermi, "eV"
+
+
+kpt,energy = qe_parse.parse_qe_eigenval(filename)
+kpath = get_path(kpt)
+get_sym_kpts=[item for item in os.popen('grep -A 100 crystal_b *.in|grep -').readlines()]
+nxsym=int(get_sym_kpts[0].split('-')[1])
+print 'number of high symmetryic k points',nxsym
+segment_nkpt=[int(get_sym_kpts[i].split()[3]) for i in range(1,nxsym+1)][:-1]
+try:
+   label_k = ['$'+get_sym_kpts[i].split()[4]+'$' for i in range(1,nxsym+1)]
+except:
+   pass
+if np.cumsum(segment_nkpt)[-1]+1 != len(kpath):
+   print 'Error! Please check the {0} file carefully!'.format(filename)
+   print 'assumed # of k-points: {0}'.format(np.cumsum(segment_nkpt)[-1]+1)
+   print '# of k-points in the {0} file: {1}'.format(filename,len(kpath))
+   #exit()
+print np.cumsum(segment_nkpt)
+print len(kpath)
+xsym = [kpath[0]]+[kpath[isym] for isym in np.cumsum(segment_nkpt)]
+print 'xsym',' '.join(['{0:7.5f}'.format(ixsym) for ixsym in xsym])
+energy=energy-efermi
+
+
+#write.write_band(kpath,energy)
+nkpt,nband,nspin = energy.shape
+xplot.plot_band(args,kpath,energy,xsym,label_k=label_k,output='band_structure')
+
+
+fw = open(r'Band.dat','w')
+for iband in range(nband):
+    for ikpt in range(nkpt):
+        print>>fw,'{0:12.6f} {1:12.6f}'.format(kpath[ikpt],energy[ikpt,iband,0])
+    print>>fw,''
+fw.close()
+fw=open(r'Band-sort.dat','w')
+for ikpt in range(nkpt):
+    print>>fw,'{0:12.6f}'.format(kpath[ikpt]),
+    for iband in range(nband):
+	print>>fw,'{0:10f}'.format(float(energy[ikpt,iband,0])),
+    print>>fw,''
+fw.close()
+fw=open('k-path','w')
+for ikpt in range(nkpt):
+    print >>fw,'{0:12.6f} {1:12.6f} {2:12.6f}'.format(kpt[ikpt,0],kpt[ikpt,1],kpt[ikpt,2])
+fw.close()
