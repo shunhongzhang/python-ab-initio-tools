@@ -9,5 +9,6 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
 License for more details.
 
 Any question during the use of pat, feel free to contacat
-Shunhong Zhang <zhangshunhong@tsinghua.edu.cn>
+Shunhong Zhang
+zhangshunhong.pku@gmail.com
 
